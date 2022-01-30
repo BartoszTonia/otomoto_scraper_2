@@ -7,7 +7,7 @@ import datetime
 import requests
 import re
 
-# search_page = "https://www.otomoto.pl/osobowe/ford--nissan?search%5Bfilter_enum_fuel_type%5D=electric&search%5Bfilter_float_mileage%3Afrom%5D=50"
+# search_page = "https://www.otomoto.pl/osobowe/mercedes-benz/s-klasa/od-2004?search%5Bfilter_float_year%3Ato%5D=2011"
 search_page = "https://www.otomoto.pl/osobowe?search%5Bfilter_enum_fuel_type%5D=electric&search%5Bfilter_float_mileage%3Afrom%5D=1000"
 offers = [{'url': search_page}]     # save to file session_{}.csv
 url_list = [search_page]    # save to file - links.txt
@@ -18,7 +18,7 @@ def count_pages( url ):
     first_page = requests.get(url)
     soup = BeautifulSoup(first_page.content, 'html.parser')
     try:
-        count = soup.find_all('a', 'optimus-app-g4wbjr ekxs86z0')[-1].text
+        count = soup.find_all('a', 'ooa-g4wbjr ekxs86z0')[-1].text
     except IndexError:
         count = 1
     first_page.close()
@@ -101,7 +101,7 @@ def main():
         with open(Path('out/links.txt'), 'w') as file:
             file.write('\n'.join(url_list))
 
-    # # # # # (Optional) Read from file  # # # # #
+    # # # # # (Optional) Read from file prepared list  # # # # #
     # with open(Path('out/links.txt'), 'r') as file:
     #     url_list = file.read().split('\n')
     #     print(url_list)
