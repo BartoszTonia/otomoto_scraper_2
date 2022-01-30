@@ -1,5 +1,7 @@
 ## ..:: Otomoto scraper ::..
 
+<a href="https://nbviewer.jupyter.org/github/BartoszTonia/otomoto_scraper_2/blob/master/electric_secondary_market.ipynb"> Demo file overview </a>
+
 
 ### Features
 Create tables with data scraped from Otomoto search page. 
