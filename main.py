@@ -18,7 +18,7 @@ def count_pages( url ):
     first_page = requests.get(url)
     soup = BeautifulSoup(first_page.content, 'html.parser')
     try:
-        count = soup.find_all('a', 'ooa-g4wbjr ekxs86z0')[-1].text
+        count = soup.find_all('a', 'ooa-xdlax9 e1f09v7o0')[-1].text
     except IndexError:
         count = 1
     first_page.close()
@@ -57,7 +57,8 @@ def extract_soup( soup ):
     price = re.sub(r'\s', '', price).rstrip('PLN')
 
     offer = {'price': price}
-    regex_list = ['(.*Zasięg.*)', '(.*zasięg.*)', '(.*Zasieg.*)', '(.*zasieg.*)', '(.*można przejechać.*)']
+    regex_list = ['(.*Zasięg.*)', '(.*zasięg.*)', '(.*Zasieg.*)', '(.*zasieg.*)', '(.*można przejechać.*)',
+                  '(.*Ładuje.*)', '(.*ładuje.*)', '(.*ładowani.*)']
     for regex in regex_list:
         if re.findall(regex, descr):
             offer['distance'] = re.findall(regex, descr)
@@ -86,7 +87,7 @@ def save_progress():
     # # # # # add offers to database and save # # # # #
     for each in offers:
         # if each['url'] not in df['url']:
-        df = df.append(each, ignore_index=True)
+        df = df._append(each, ignore_index=True)
 
     df.to_csv(Path('out/session.csv'))
 
