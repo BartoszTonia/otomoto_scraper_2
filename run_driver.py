@@ -1,19 +1,22 @@
-from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.webdriver.chrome.service import Service
 from selenium import webdriver
 from time import sleep
 import requests
 
 
 options = Options()
-options.headless = True
+options.add_argument('headless')
+options.add_experimental_option('excludeSwitches', ['enable-logging'])  # hides DevTools output in console
 
 
 def run_driver(url):
-    driver = webdriver.Firefox(options=options, executable_path='driver/geckodriver.exe')
+    service = Service("driver\chromedriver.exe")
+    driver = webdriver.Chrome(options=options, service=service)
 
     try:
         driver.get(url)
