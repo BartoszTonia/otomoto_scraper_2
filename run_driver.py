@@ -1,50 +1,59 @@
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.wait import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.chrome.service import Service
-from selenium import webdriver
-from time import sleep
-import requests
+from __future__ import annotations
+
+from playwright.sync_api import (
+    Browser,
+    BrowserContext,
+    Error,
+    Page,
+    Playwright,
+    TimeoutError as PlaywrightTimeoutError,
+    sync_playwright,
+)
 
 
-options = Options()
-options.add_argument('headless')
-options.add_experimental_option('excludeSwitches', ['enable-logging'])  # hides DevTools output in console
+class BrowserSession:
+    """Playwright browser session with simple retry logic for Otomoto pages."""
 
+    def __init__(self, headless: bool = True, timeout_ms: int = 25_000) -> None:
+        self._playwright: Playwright = sync_playwright().start()
+        self._browser: Browser = self._playwright.chromium.launch(
+            headless=headless,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        self._context: BrowserContext = self._browser.new_context(
+            locale="pl-PL",
+            viewport={"width": 1920, "height": 1080},
+            user_agent=(
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+        )
+        self._timeout_ms = timeout_ms
 
-def run_driver(url):
-    service = Service("driver\chromedriver.exe")
-    driver = webdriver.Chrome(options=options, service=service)
+    def close(self) -> None:
+        self._context.close()
+        self._browser.close()
+        self._playwright.stop()
 
-    try:
-        driver.get(url)
-    except WebDriverException:
-        sleep(7.5)
-        print(' >>>>> second try')
+    def fetch_html(self, url: str, wait_selector: str | None = None) -> tuple[str, str]:
+        page: Page = self._context.new_page()
+
         try:
-            driver.get(url)
-        except WebDriverException:
-            sleep(3.2)
-            print("failed, return driver")
-            return run_driver(url)
-
-    print('>>> ', driver.title, end=' - ')
-
-    try:
-        delay = 3
-        price_selector = '#description'
-        WebDriverWait(driver, delay).until(EC.presence_of_element_located((By.CSS_SELECTOR, price_selector)))
-    except TimeoutException:
-        print('...', end=' ')
-        sleep(2.3)
-        try:
-            delay = 3
-            price_selector = '#page-header > div > div.optimus-app-70qvj9 > div > a > img'
-            WebDriverWait(driver, delay).until(EC.presence_of_element_located((By.CSS_SELECTOR, price_selector)))
-        except TimeoutException:
-            print('---', end=' ')
-            sleep(2.3)
-
-    return driver
+            for attempt in range(3):
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=self._timeout_ms)
+                    if wait_selector:
+                        page.wait_for_selector(wait_selector, timeout=6_000)
+                    else:
+                        page.wait_for_load_state("networkidle", timeout=10_000)
+                    title = page.title()
+                    html = page.content()
+                    print(f">>> {title} - loaded")
+                    return title, html
+                except (PlaywrightTimeoutError, Error):
+                    if attempt == 2:
+                        raise
+                    print(">>>>> retry page load")
+            raise RuntimeError("unreachable")
+        finally:
+            page.close()
