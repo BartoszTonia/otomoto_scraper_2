@@ -1,131 +1,166 @@
-from run_driver import run_driver
-from bs4 import BeautifulSoup
-from pathlib import Path
-from time import sleep, time
-import pandas as pd
+from __future__ import annotations
+
 import datetime
-import requests
+import json
 import re
+from pathlib import Path
+from urllib.parse import urljoin
+from time import sleep, time
+
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+
+from run_driver import BrowserSession
 
 # search_page = "https://www.otomoto.pl/osobowe/mercedes-benz/s-klasa/od-2004?search%5Bfilter_float_year%3Ato%5D=2011"
 search_page = "https://www.otomoto.pl/osobowe?search%5Bfilter_enum_fuel_type%5D=electric&search%5Bfilter_float_mileage%3Afrom%5D=1000"
-offers = [{'url': search_page}]     # save to file session_{}.csv
-url_list = [search_page]    # save to file - links.txt
+offers = [{"url": search_page}]  # save to file session.csv
+url_list = [search_page]  # save to file - links.txt
+OUTPUT_DIR = Path("out")
 
 
-def count_pages( url ):
+def count_pages(url: str) -> list[str]:
     search_pages_list = [url]
-    first_page = requests.get(url)
-    soup = BeautifulSoup(first_page.content, 'html.parser')
-    try:
-        count = soup.find_all('a', 'ooa-xdlax9 e1f09v7o0')[-1].text
-    except IndexError:
-        count = 1
-    first_page.close()
-    sleep(3)
-    page_number = 2
-    while page_number <= int(count):
-        next_page = url + '&page=' + str(page_number)
-        search_pages_list.append(next_page)
-        page_number += 1
+    response = requests.get(url, timeout=20)
+    soup = BeautifulSoup(response.content, "html.parser")
 
-    sleep(3)
+    total_pages = 1
+    for anchor in soup.find_all("a", href=True):
+        href = anchor.get("href", "")
+        match = re.search(r"[?&]page=(\d+)", href)
+        if match:
+            total_pages = max(total_pages, int(match.group(1)))
+
+    for page_number in range(2, total_pages + 1):
+        search_pages_list.append(f"{url}&page={page_number}")
+
     return search_pages_list
 
 
-def scrape_links_from( url ):
-    page = run_driver(url)
-    soup = BeautifulSoup(page.page_source, 'html.parser')
-    href_bundle = soup.find_all('a', href=True)
+def scrape_links_from(page_html: str) -> None:
+    soup = BeautifulSoup(page_html, "html.parser")
+    href_bundle = soup.find_all("a", href=True)
     total_count = 0
     offers_count = 0
-    for each in href_bundle:
+
+    for anchor in href_bundle:
         total_count += 1
-        if "otomoto.pl/oferta" in str(each['href']) and "link=https://www.otomoto.pl/oferta/" not in str(each['href']):
+        raw_href = anchor["href"]
+        href = urljoin("https://www.otomoto.pl", raw_href)
+
+        # Otomoto changed offer URLs in the past (e.g. /oferta/... and /osobowe/oferta/...),
+        # so we accept any URL containing /oferta/ while ignoring tracking wrappers.
+        if "/oferta/" in href and "link=https://www.otomoto.pl/" not in href:
             offers_count += 1
-            if each['href'] not in url_list:
-                url_list.append(each['href'])
+            if href not in url_list:
+                url_list.append(href)
 
     print(total_count, offers_count, len(url_list))
-    page.close()
-    sleep(4.9)
 
 
-def extract_soup( soup ):
-    descr = soup.find('div', 'offer-description__description').text
-    price = soup.find('span', 'offer-price__number').text
-    price = re.sub(r'\s', '', price).rstrip('PLN')
+def extract_soup(soup: BeautifulSoup) -> dict[str, str | list[str]]:
+    offer: dict[str, str | list[str]] = {}
 
-    offer = {'price': price}
-    regex_list = ['(.*Zasięg.*)', '(.*zasięg.*)', '(.*Zasieg.*)', '(.*zasieg.*)', '(.*można przejechać.*)',
-                  '(.*Ładuje.*)', '(.*ładuje.*)', '(.*ładowani.*)']
-    for regex in regex_list:
-        if re.findall(regex, descr):
-            offer['distance'] = re.findall(regex, descr)
-            print(offer['distance'])
+    jsonld = soup.find("script", attrs={"type": "application/ld+json"})
+    if jsonld and jsonld.text:
+        try:
+            data = json.loads(jsonld.text)
+            if isinstance(data, dict):
+                price = data.get("offers", {}).get("price")
+                if price:
+                    offer["price"] = str(price)
+                brand = data.get("brand", {}).get("name")
+                model = data.get("model")
+                if brand:
+                    offer["Marka"] = str(brand)
+                if model:
+                    offer["Model"] = str(model)
+        except json.JSONDecodeError:
+            pass
 
-    labels = soup.find_all('span', 'offer-params__label')
-    values = soup.find_all('div', 'offer-params__value')
-    for x in range(len(values)):
-        label = re.split(r"\s", labels[x].text.lstrip('\n'))[0]
-        value = re.sub(r"\s", '', values[x].text.lstrip('\n'))
+    desc_node = soup.select_one('[data-testid="content-description"]') or soup.find(
+        "div", class_=re.compile("description", re.IGNORECASE)
+    )
+    description = desc_node.get_text(" ", strip=True) if desc_node else ""
+
+    if "price" not in offer:
+        price_node = soup.select_one('[data-testid="ad-price"]') or soup.find(
+            "span", class_=re.compile("price", re.IGNORECASE)
+        )
+        if price_node:
+            offer["price"] = re.sub(r"\D", "", price_node.get_text())
+
+    regex_list = [
+        r"(.*Zasięg.*)",
+        r"(.*zasięg.*)",
+        r"(.*Zasieg.*)",
+        r"(.*zasieg.*)",
+        r"(.*można przejechać.*)",
+        r"(.*Ładuje.*)",
+        r"(.*ładuje.*)",
+        r"(.*ładowani.*)",
+    ]
+
+    for pattern in regex_list:
+        matches = re.findall(pattern, description)
+        if matches:
+            offer["distance"] = matches
+            break
+
+    labels = soup.select('[data-testid="advert-details-item-label"]')
+    values = soup.select('[data-testid="advert-details-item-value"]')
+    for label_node, value_node in zip(labels, values, strict=False):
+        label = re.split(r"\s", label_node.get_text(strip=True))[0]
+        value = value_node.get_text(" ", strip=True)
         offer[label] = value
 
     return offer
 
 
-def save_progress():
-    # # # # # arrange columns # # # # #
-    keys = []  # database columns
-    for each in offers:
-        for key, value in each.items():
-            if key not in keys:
-                keys.append(key)
+def save_progress() -> None:
+    OUTPUT_DIR.mkdir(exist_ok=True)
 
-    df = pd.DataFrame(columns=keys)  # create database with offer dictionary keys as columns
-
-    # # # # # add offers to database and save # # # # #
-    for each in offers:
-        # if each['url'] not in df['url']:
-        df = df._append(each, ignore_index=True)
-
-    df.to_csv(Path('out/session.csv'))
+    # pandas>=2 removed private DataFrame._append; from_records handles sparse dict keys.
+    df = pd.DataFrame.from_records(offers)
+    df.to_csv(OUTPUT_DIR / "session.csv", index=False)
 
 
-def main():
-    # # # # # gather all links into 'url_list' # # # # #
-    total_pages = count_pages(search_page)
-    print(len(total_pages), ' pages found')
-    for page in total_pages:
-        sleep(3)
-        scrape_links_from(page)
-        with open(Path('out/links.txt'), 'w') as file:
-            file.write('\n'.join(url_list))
+def main() -> None:
+    OUTPUT_DIR.mkdir(exist_ok=True)
 
-    # # # # # (Optional) Read from file prepared list  # # # # #
-    # with open(Path('out/links.txt'), 'r') as file:
-    #     url_list = file.read().split('\n')
-    #     print(url_list)
+    session = BrowserSession(headless=True)
+    try:
+        total_pages = count_pages(search_page)
+        print(len(total_pages), " pages found")
 
-    # # # # # scrape data from 'url_list' links # # # # #
-    for url in url_list:
-        response = run_driver(url)
-        offer_soup = BeautifulSoup(response.page_source, 'html.parser')
-        try:
-            offer = extract_soup(offer_soup)
-        except AttributeError:
-            print('>>>>>>>>>>Attribute Error<<<<<<<<<<<< - offer does not exist')
-            offer = {}
-        offer['url'] = url
-        offers.append(offer)
-        response.close()
-        print(offer)
-        save_progress()
-        sleep(1.3)
+        for page_url in total_pages:
+            _, html = session.fetch_html(page_url)
+            scrape_links_from(html)
+            (OUTPUT_DIR / "links.txt").write_text("\n".join(url_list), encoding="utf-8")
+            sleep(1)
+
+        for url in url_list:
+            _, html = session.fetch_html(url)
+            offer_soup = BeautifulSoup(html, "html.parser")
+            try:
+                offer = extract_soup(offer_soup)
+            except AttributeError:
+                print(">>>>>>>>>>Attribute Error<<<<<<<<<<<< - offer does not exist")
+                offer = {}
+            offer["url"] = url
+            offers.append(offer)
+            print(offer)
+            save_progress()
+            sleep(0.5)
+    finally:
+        session.close()
 
     t = time()
     timestamp = datetime.datetime.fromtimestamp(t)
     print(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
-    print('>> total offers >> ', len(url_list), len(offers))
+    print(">> total offers >> ", len(url_list), len(offers))
 
-main()
+
+if __name__ == "__main__":
+    main()
