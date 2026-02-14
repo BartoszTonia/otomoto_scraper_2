@@ -2,16 +2,16 @@
 
 <a href="https://nbviewer.jupyter.org/github/BartoszTonia/otomoto_scraper_2/blob/master/electric_secondary_market.ipynb"> Demo file overview </a>
 
+### Co zostało odświeżone
+- scraper działa teraz na **Playwright** (bez Selenium),
+- domyślnie uruchamia się **Chromium headless** z pełnym viewportem desktop,
+- selektory pod szczegóły oferty zostały zmapowane pod aktualny layout (`data-testid`),
+- parser wspiera dodatkowo `application/ld+json` (cena/marka/model), co zwiększa odporność na zmiany layoutu.
 
 ### Features
-Create tables with data scraped from Otomoto search page. 
+Create tables with data scraped from Otomoto search page.
 
-As default it scrape all electric cars with mileage over 1000 km. This can be edited within the code in `main.py` at `line #11` 
-
-```
-11    search_page = "https://www.otomoto.pl/osobowe?search%5Bfilter_enum_fuel_type%5D=electric&search%5Bfilter_float_mileage%3Afrom%5D=1000"
-```
-
+As default it scrape all electric cars with mileage over 1000 km. This can be edited within the code in `main.py`.
 
 Table contains following columns:
 - price
@@ -20,44 +20,30 @@ Table contains following columns:
 - year
 
 and more options if they only were assigned in original offer like:
-- <b> range for electric cars </b>
+- range for electric cars
 - leasing prices
 - horsepower
 - transmission type
 - and more...
 
-```
-"Index(['Unnamed: 0', 'url', 'price', 'Oferta', 'Kategoria', 'Marka', 'Model',
-       'Wersja', 'Rok', 'Przebieg', 'Rodzaj', 'Moc', 'Skrzynia', 'Napęd',
-       'Typ', 'Liczba', 'Kolor', 'Możliwość', 'Leasing', 'Zarejestrowany',
-       'Pierwszy', 'Bezwypadkowy', 'Serwisowany', 'Stan', 'VAT', 'Kraj',
-       'Faktura', 'Pierwsza', 'distance', 'Okres', 'lub', 'Numer', 'Gwarancja',
-       'Generacja', 'Tuning', 'Opłata', 'Miesięczna', 'Wartość', 'Kierownica',
-       'Homologacja', 'Spalanie', 'Emisja', 'Uszkodzony', 'Filtr'],
-      dtype='object')"
-
-```
-
-
 ### Prerequisites :coffee:
 
 You will need the following things properly installed on your machine.
 
-* python3
-* pip3
-```
-apt-get install python3-pip
-```
+- python3
+- pip3
 
 ### Installation :books:
-1. Install all dependencies using 
+1. Install python dependencies:
+```bash
+pip3 install -r requirements.txt
 ```
- pip3 install -r requirements.txt 
+2. Install Playwright browser binaries:
+```bash
+python3 -m playwright install chromium
 ```
-
 
 ### Run
-Try according to line below
-```
+```bash
 python3 main.py
 ```
