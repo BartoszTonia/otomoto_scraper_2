@@ -46,12 +46,10 @@ def scrape_links_from(page_html: str) -> None:
 
     for anchor in href_bundle:
         total_count += 1
-        raw_href = anchor["href"]
-        href = urljoin("https://www.otomoto.pl", raw_href)
+        href = anchor["href"]
+        href = f"https://www.otomoto.pl{href}" if href.startswith("/") else href
 
-        # Otomoto changed offer URLs in the past (e.g. /oferta/... and /osobowe/oferta/...),
-        # so we accept any URL containing /oferta/ while ignoring tracking wrappers.
-        if "/oferta/" in href and "link=https://www.otomoto.pl/oferta/" not in href:
+        if "https://www.otomoto.pl/oferta/" in href and "link=https://www.otomoto.pl/oferta/" not in href:
             offers_count += 1
             if href not in url_list:
                 url_list.append(href)
@@ -115,14 +113,23 @@ def extract_soup(soup: BeautifulSoup) -> dict[str, str | list[str]]:
         value = value_node.get_text(" ", strip=True)
         offer[label] = value
 
-    return offer
 
+def extract_soup(soup: BeautifulSoup) -> dict[str, str | list[str]]:
+    offer: dict[str, str | list[str]] = {}
 
 def save_progress() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
 
-    # pandas>=2 removed private DataFrame._append; from_records handles sparse dict keys.
-    df = pd.DataFrame.from_records(offers)
+    keys: list[str] = []
+    for each in offers:
+        for key in each.keys():
+            if key not in keys:
+                keys.append(key)
+
+    df = pd.DataFrame(columns=keys)
+    for each in offers:
+        df = df._append(each, ignore_index=True)
+
     df.to_csv(OUTPUT_DIR / "session.csv", index=False)
 
 
