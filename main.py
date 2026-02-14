@@ -4,6 +4,7 @@ import datetime
 import json
 import re
 from pathlib import Path
+from urllib.parse import urljoin
 from time import sleep, time
 
 import pandas as pd
@@ -112,8 +113,9 @@ def extract_soup(soup: BeautifulSoup) -> dict[str, str | list[str]]:
         value = value_node.get_text(" ", strip=True)
         offer[label] = value
 
-    return offer
 
+def extract_soup(soup: BeautifulSoup) -> dict[str, str | list[str]]:
+    offer: dict[str, str | list[str]] = {}
 
 def save_progress() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
